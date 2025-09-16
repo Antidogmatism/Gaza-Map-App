@@ -1,0 +1,17 @@
+{
+  "name": "gaza-map-comparison",
+  "version": "1.0.0",
+  "description": "Interactive Gaza size comparison map",
+  "main": "index.html",
+  "scripts": {
+    "dev": "serve .",
+    "start": "serve .",
+    "build": "echo 'Static site - no build needed'"
+  },
+  "keywords": ["gaza", "map", "comparison", "leaflet"],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.0.0"
+  }
+}

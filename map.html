@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Map - Gaza Comparison</title>
+    <meta name="description" content="Interactive map to compare Gaza Strip size with any location worldwide" />
+    <meta name="theme-color" content="#059669" />
+    <link rel="manifest" href="manifest.json" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin=""
+    ></script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      #map {
+        height: 100vh;
+        width: 100vw;
+        z-index: 0;
+      }
+      .controls {
+        position: fixed;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        transition: transform 0.3s ease;
+      }
+      .controls.hidden {
+        transform: translateX(-50%) translateY(-100%);
+      }
+      .toggle-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 1001;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 6px;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.2s ease;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .toggle-btn:hover {
+        background: #f9f9f9;
+        border-color: #bbb;
+      }
+      .show-controls-btn {
+        position: fixed;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: white;
+        border: 2px solid #333;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        font-size: 14px;
+        font-weight: 500;
+        display: none;
+      }
+      .show-controls-btn.visible {
+        display: block;
+      }
+      .draggable-gaza-outline {
+        cursor: grab;
+      }
+      .draggable-gaza-outline:active {
+        cursor: grabbing;
+      }
+      .bottom-link {
+        position: fixed;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Show Controls Button (appears when controls are hidden) -->
+    <button class="show-controls-btn" id="showControlsBtn">
+      ⚙️ Show Controls
+    </button>
+
+    <div class="controls bg-white shadow-md rounded p-4 flex flex-col gap-2 w-72" id="controls">
+      <!-- Toggle Button inside controls -->
+      <button class="toggle-btn" id="toggleControls" title="Hide Controls">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="6"></line>
+          <line x1="18" y1="12" x2="6" y2="12"></line>
+          <line x1="18" y1="18" x2="6" y2="18"></line>
+        </svg>
+      </button>
+      
+      <input id="locationInput" type="text" placeholder="Enter your city..." class="border px-3 py-2 rounded w-full" />
+      <button id="searchBtn" class="bg-gray-900 text-white py-2 px-4 rounded hover:bg-gray-800">Go</button>
+      <button id="locateBtn" class="bg-gray-200 text-gray-800 py-2 px-4 rounded hover:bg-gray-300">Use My Location</button>
+      <hr class="border-gray-200">
+      <div class="text-sm text-gray-600">
+        <p class="font-medium mb-1">Gaza Comparison:</p>
+        <p class="text-xs">• <span class="text-red-600">Red outline</span>: Original Gaza location</p>
+        <p class="text-xs">• <span class="text-green-600">Green outline</span>: Draggable comparison</p>
+        <p class="text-xs">• Drag green outline to move • Hold Ctrl + drag to rotate</p>
+      </div>
+      <div class="flex gap-2">
+        <button id="moveGazaHereBtn" class="bg-green-500 text-white py-2 px-3 rounded hover:bg-green-600 text-sm flex-1">Move Gaza Here</button>
+        <button id="resetGazaBtn" class="bg-blue-500 text-white py-2 px-3 rounded hover:bg-blue-600 text-sm flex-1">Reset Position</button>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="bottom-link text-center">
+      <a href="info.html" class="text-sm text-gray-700 underline">Learn more about Gaza</a>
+    </div>
+
+    <script>
+      // Initialize map
+      const map = L.map('map').setView([31.5, 34.47], 10);
+
+      // Add tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      let gazaLayer;
+      let currentLocationMarker;
+      let gazaComparisonLayer;
+      let draggableGazaLayer;
+      let gazaOriginalData;
+      let currentRotation = 0;
+      let isControlsVisible = true;
+
+      // Load Gaza GeoJSON with enhanced styling
+      fetch('gaza.geojson/areas/gaza-strip.geojson')
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          console.log('Gaza GeoJSON loaded successfully:', data);
+          gazaOriginalData = data; // Store original data for dragging
+          
+          // Original Gaza layer (fixed position)
+          gazaLayer = L.geoJSON(data, {
+            style: {
+              color: '#dc2626',
+              weight: 3,
+              fillOpacity: 0.3,
+              fillColor: '#dc2626',
+              dashArray: '5, 5'
+            },
+          }).addTo(map);
+          
+          // Add popup to Gaza layer
+          gazaLayer.bindPopup('<b>Gaza Strip (Original)</b><br>Area: ~365 km²<br>Population: ~2.3 million');
+          
+          // Create draggable Gaza layer
+          createDraggableGaza();
+        })
+        .catch((error) => {
+          console.error('Error loading Gaza GeoJSON:', error);
+          alert('Error loading Gaza map data. Please check the file path.');
+        });
+
+      // Function to create a draggable Gaza outline
+      function createDraggableGaza() {
+        if (!gazaOriginalData) return;
+        
+        // Calculate center of Gaza for initial positioning
+        const bounds = L.geoJSON(gazaOriginalData).getBounds();
+        const center = bounds.getCenter();
+        
+        // Create initial draggable Gaza layer
+        updateDraggableGaza(center.lat, center.lng);
+        
+        // Store the current position for reset functionality
+        window.currentGazaPosition = { lat: center.lat, lng: center.lng };
+      }
+
+      // Function to move draggable Gaza to current map center
+      function moveDraggableGazaToCenter() {
+        const mapCenter = map.getCenter();
+        updateDraggableGaza(mapCenter.lat, mapCenter.lng);
+        window.currentGazaPosition = { lat: mapCenter.lat, lng: mapCenter.lng };
+        console.log(`Moved draggable Gaza to map center: ${mapCenter.lat.toFixed(6)}, ${mapCenter.lng.toFixed(6)}`);
+      }
+
+      // Function to rotate a point around a center
+      function rotatePoint(point, center, angleInDegrees) {
+        const angleInRadians = (angleInDegrees * Math.PI) / 180;
+        const cos = Math.cos(angleInRadians);
+        const sin = Math.sin(angleInRadians);
+        
+        const dx = point[0] - center[0];
+        const dy = point[1] - center[1];
+        
+        const rotatedX = center[0] + (dx * cos - dy * sin);
+        const rotatedY = center[1] + (dx * sin + dy * cos);
+        
+        return [rotatedX, rotatedY];
+      }
+
+      // Function to update draggable Gaza layer position with rotation
+      function updateDraggableGaza(lat, lon) {
+        if (!gazaOriginalData) return;
+        
+        // Remove existing draggable layer
+        if (draggableGazaLayer) {
+          map.removeLayer(draggableGazaLayer);
+        }
+        
+        // Get original Gaza center for offset calculation
+        const originalBounds = L.geoJSON(gazaOriginalData).getBounds();
+        const originalCenter = originalBounds.getCenter();
+        
+        // Clone the Gaza geometry and translate it to the new location
+        const gazaFeature = gazaOriginalData.features[0];
+        
+        // First translate, then rotate if needed
+        let coordinates = gazaFeature.geometry.coordinates.map(ring => 
+          ring.map(coord => [
+            coord[0] + (lon - originalCenter.lng), // Translate longitude
+            coord[1] + (lat - originalCenter.lat)   // Translate latitude
+          ])
+        );
+        
+        // Apply rotation if currentRotation is not 0
+        if (currentRotation !== 0) {
+          coordinates = coordinates.map(ring =>
+            ring.map(coord => rotatePoint(coord, [lon, lat], currentRotation))
+          );
+        }
+        
+        const translatedFeature = {
+          ...gazaFeature,
+          geometry: {
+            ...gazaFeature.geometry,
+            coordinates: coordinates
+          }
+        };
+        
+        // Create new draggable layer with rotation capability
+        draggableGazaLayer = L.geoJSON(translatedFeature, {
+          style: {
+            color: '#059669',
+            weight: 3,
+            fillOpacity: 0.2,
+            fillColor: '#059669',
+            dashArray: '10, 5',
+            className: 'draggable-gaza-outline'
+          },
+        }).addTo(map);
+        
+        // Add drag capability to the Gaza outline
+        let isDragging = false;
+        let isRotating = false;
+        let rotationStartAngle = 0;
+        let rotationCenter = [lon, lat];
+        let dragStartPos = null;
+        
+        draggableGazaLayer.on('mousedown', (e) => {
+          if (e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+            // Rotation mode
+            isRotating = true;
+            map.dragging.disable();
+            
+            const mousePos = map.mouseEventToLatLng(e.originalEvent);
+            const centerPos = L.latLng(rotationCenter[1], rotationCenter[0]);
+            rotationStartAngle = Math.atan2(
+              mousePos.lat - centerPos.lat,
+              mousePos.lng - centerPos.lng
+            ) * 180 / Math.PI;
+          } else {
+            // Drag mode
+            isDragging = true;
+            map.dragging.disable();
+            dragStartPos = map.mouseEventToLatLng(e.originalEvent);
+          }
+          
+          e.originalEvent.preventDefault();
+        });
+        
+        map.on('mousemove', (e) => {
+          if (isRotating) {
+            const mousePos = map.mouseEventToLatLng(e.originalEvent);
+            const centerPos = L.latLng(rotationCenter[1], rotationCenter[0]);
+            const currentAngle = Math.atan2(
+              mousePos.lat - centerPos.lat,
+              mousePos.lng - centerPos.lng
+            ) * 180 / Math.PI;
+            
+            const deltaAngle = currentAngle - rotationStartAngle;
+            currentRotation = (currentRotation + deltaAngle) % 360;
+            if (currentRotation < 0) currentRotation += 360;
+            
+            updateDraggableGaza(rotationCenter[1], rotationCenter[0]);
+            rotationStartAngle = currentAngle;
+          } else if (isDragging && dragStartPos) {
+            const currentPos = map.mouseEventToLatLng(e.originalEvent);
+            const newLat = lat + (currentPos.lat - dragStartPos.lat);
+            const newLng = lon + (currentPos.lng - dragStartPos.lng);
+            
+            // Update the position and redraw
+            updateDraggableGaza(newLat, newLng);
+            window.currentGazaPosition = { lat: newLat, lng: newLng };
+          }
+        });
+        
+        map.on('mouseup', () => {
+          if (isRotating || isDragging) {
+            isRotating = false;
+            isDragging = false;
+            dragStartPos = null;
+            map.dragging.enable();
+          }
+        });
+        
+        draggableGazaLayer.bindPopup(`<b>Gaza Size Comparison (Draggable)</b><br>Same area as Gaza Strip<br>(~365 km²)<br>Rotation: ${currentRotation.toFixed(1)}°<br><small>Drag to move • Hold Ctrl + drag to rotate</small>`);
+      }
+
+      // Function to create Gaza comparison overlay at any location (for search/geolocation)
+      function createGazaComparison(lat, lon) {
+        if (gazaComparisonLayer) {
+          map.removeLayer(gazaComparisonLayer);
+        }
+        
+        if (gazaOriginalData) {
+          const gazaFeature = gazaOriginalData.features[0];
+          const originalBounds = L.geoJSON(gazaOriginalData).getBounds();
+          const originalCenter = originalBounds.getCenter();
+          
+          // Clone the Gaza geometry and translate it to the new location
+          const translatedFeature = {
+            ...gazaFeature,
+            geometry: {
+              ...gazaFeature.geometry,
+              coordinates: gazaFeature.geometry.coordinates.map(ring => 
+                ring.map(coord => [
+                  coord[0] + (lon - originalCenter.lng), // Translate longitude
+                  coord[1] + (lat - originalCenter.lat)   // Translate latitude
+                ])
+              )
+            }
+          };
+          
+          gazaComparisonLayer = L.geoJSON(translatedFeature, {
+            style: {
+              color: '#8b5cf6',
+              weight: 3,
+              fillOpacity: 0.2,
+              fillColor: '#8b5cf6',
+              dashArray: '15, 5'
+            },
+          }).addTo(map);
+          
+          gazaComparisonLayer.bindPopup('<b>Gaza Size Comparison (Auto)</b><br>Positioned at your searched/located area<br>(~365 km²)');
+        }
+      }
+
+      // Toggle controls visibility
+      document.getElementById('toggleControls').addEventListener('click', () => {
+        const controls = document.getElementById('controls');
+        const showBtn = document.getElementById('showControlsBtn');
+        
+        isControlsVisible = !isControlsVisible;
+        
+        if (isControlsVisible) {
+          controls.classList.remove('hidden');
+          showBtn.classList.remove('visible');
+        } else {
+          controls.classList.add('hidden');
+          showBtn.classList.add('visible');
+        }
+      });
+
+      // Show controls button
+      document.getElementById('showControlsBtn').addEventListener('click', () => {
+        const controls = document.getElementById('controls');
+        const showBtn = document.getElementById('showControlsBtn');
+        
+        isControlsVisible = true;
+        controls.classList.remove('hidden');
+        showBtn.classList.remove('visible');
+      });
+
+      // Move Gaza to current map center button
+      document.getElementById('moveGazaHereBtn').addEventListener('click', () => {
+        moveDraggableGazaToCenter();
+      });
+
+      // Reset Gaza position button
+      document.getElementById('resetGazaBtn').addEventListener('click', () => {
+        if (gazaOriginalData) {
+          const originalBounds = L.geoJSON(gazaOriginalData).getBounds();
+          const originalCenter = originalBounds.getCenter();
+          
+          // Reset rotation
+          currentRotation = 0;
+          
+          // Reset draggable Gaza to original position
+          updateDraggableGaza(originalCenter.lat, originalCenter.lng);
+          
+          // Update stored position
+          window.currentGazaPosition = { lat: originalCenter.lat, lng: originalCenter.lng };
+          
+          // Move map to Gaza if not already visible
+          if (!map.getBounds().intersects(originalBounds)) {
+            map.fitBounds(originalBounds, { padding: [20, 20] });
+          }
+          
+          console.log('Gaza comparison reset to original position and rotation');
+        }
+      });
+
+      // Check for URL parameters (from index page location redirect)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlLat = urlParams.get('lat');
+      const urlLon = urlParams.get('lon');
+      
+      if (urlLat && urlLon) {
+        const lat = parseFloat(urlLat);
+        const lon = parseFloat(urlLon);
+        map.setView([lat, lon], 12);
+        
+        // Add marker for current location
+        currentLocationMarker = L.marker([lat, lon])
+          .addTo(map)
+          .bindPopup('Your Location')
+          .openPopup();
+          
+        // Move the draggable Gaza to this location instead of creating a separate layer
+        setTimeout(() => {
+          updateDraggableGaza(lat, lon);
+          window.currentGazaPosition = { lat: lat, lng: lon };
+        }, 1000); // Wait for Gaza data to load
+      }
+
+      // Search functionality
+      document.getElementById('searchBtn').addEventListener('click', () => {
+        const location = document.getElementById('locationInput').value.trim();
+        if (!location) {
+          alert('Please enter a location to search for.');
+          return;
+        }
+        
+        // Clear previous location marker
+        if (currentLocationMarker) {
+          map.removeLayer(currentLocationMarker);
+        }
+        
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lon = parseFloat(data[0].lon);
+              const displayName = data[0].display_name;
+              
+              map.setView([lat, lon], 12);
+              
+              // Add marker for searched location
+              currentLocationMarker = L.marker([lat, lon])
+                .addTo(map)
+                .bindPopup(`<b>${displayName}</b>`)
+                .openPopup();
+                
+              // Move the draggable Gaza to this location instead of creating a separate layer
+              updateDraggableGaza(lat, lon);
+              window.currentGazaPosition = { lat: lat, lng: lon };
+            } else {
+              alert('Location not found. Please try a different search term.');
+            }
+          })
+          .catch((error) => {
+            console.error('Search error:', error);
+            alert('Error searching for location. Please try again.');
+          });
+      });
+
+      // Enhanced geolocation functionality with debugging
+      document.getElementById('locateBtn').addEventListener('click', () => {
+        console.log('Location button clicked!');
+        
+        // Check if geolocation is available
+        if (!navigator.geolocation) {
+          console.error('Geolocation not supported');
+          alert('Geolocation is not supported by your browser.');
+          return;
+        }
+        
+        console.log('Geolocation is supported, requesting position...');
+        
+        // Show loading state
+        const btn = document.getElementById('locateBtn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Locating...';
+        btn.disabled = true;
+        
+        // Check if we're on HTTPS or localhost
+        const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        console.log('Protocol:', location.protocol, 'Hostname:', location.hostname, 'Is secure context:', isSecure);
+        
+        if (!isSecure) {
+          console.warn('Geolocation may not work over HTTP on remote hosts');
+        }
+        
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            console.log('✅ Location success!');
+            console.log('Latitude:', position.coords.latitude);
+            console.log('Longitude:', position.coords.longitude);
+            console.log('Accuracy:', position.coords.accuracy, 'meters');
+            console.log('Timestamp:', new Date(position.timestamp));
+            
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            // Clear previous location marker
+            if (currentLocationMarker) {
+              map.removeLayer(currentLocationMarker);
+            }
+            
+            map.setView([lat, lon], 12);
+            
+            // Add marker for current location
+            currentLocationMarker = L.marker([lat, lon])
+              .addTo(map)
+              .bindPopup(`<b>Your Location</b><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}<br>Accuracy: ±${Math.round(position.coords.accuracy)}m`)
+              .openPopup();
+              
+            // Move the draggable Gaza to this location instead of creating a separate layer
+            updateDraggableGaza(lat, lon);
+            window.currentGazaPosition = { lat: lat, lng: lon };
+            
+            // Reset button
+            btn.textContent = originalText;
+            btn.disabled = false;
+            
+            // Show success message
+            console.log('Location marker added and map centered');
+          },
+          (error) => {
+            console.error('❌ Geolocation error:', error);
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
+            
+            let errorMessage = 'Unable to retrieve your location. ';
+            let troubleshooting = '';
+            
+            switch(error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage += 'Permission denied.';
+                troubleshooting = '\n\nTroubleshooting:\n• Click the location icon in your browser\'s address bar\n• Allow location access for this site\n• Refresh the page and try again';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                errorMessage += 'Location information is unavailable.';
+                troubleshooting = '\n\nTroubleshooting:\n• Check if location services are enabled on your device\n• Try moving to a different location with better GPS signal';
+                break;
+              case error.TIMEOUT:
+                errorMessage += 'Location request timed out.';
+                troubleshooting = '\n\nTroubleshooting:\n• Try again with a better internet connection\n• Make sure GPS/location services are enabled';
+                break;
+              default:
+                errorMessage += 'An unknown error occurred.';
+                troubleshooting = '\n\nTroubleshooting:\n• Try refreshing the page\n• Check browser console for more details';
+                break;
+            }
+            
+            // Check for HTTPS requirement
+            if (!isSecure && error.code === error.PERMISSION_DENIED) {
+              troubleshooting += '\n• This site is using HTTP - some browsers require HTTPS for location access';
+            }
+            
+            alert(errorMessage + troubleshooting);
+            
+            // Reset button
+            btn.textContent = originalText;
+            btn.disabled = false;
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 15000, // Increased timeout
+            maximumAge: 60000 // Reduced cache time for testing
+          }
+        );
+      });
+
+      // Allow Enter key to trigger search
+      document.getElementById('locationInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          document.getElementById('searchBtn').click();
+        }
+      });
+
+      // Register service worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

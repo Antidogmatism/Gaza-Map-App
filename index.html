@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gaza Size Comparison</title>
+    <meta name="description" content="Interactive map to compare Gaza Strip size with any location worldwide" />
+    <meta name="theme-color" content="#059669" />
+    <link rel="manifest" href="manifest.json" />
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-white text-gray-900 font-sans">
+    <div class="flex flex-col items-center justify-center h-screen text-center px-4">
+      <h1 class="text-4xl font-semibold mb-4">How Big Is Gaza?</h1>
+      <p class="mb-6 text-gray-600 max-w-md">
+        See how the size of Gaza compares to your city or region.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 w-full max-w-xs justify-center">
+        <a href="map.html" class="bg-gray-900 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition">Enter Location</a>
+        <button id="useLocationBtn" class="py-3 px-6 border border-gray-400 rounded-lg hover:bg-gray-100 transition">Use My Location</button>
+      </div>
+    </div>
+
+    <script>
+      document.getElementById('useLocationBtn').addEventListener('click', () => {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const lat = position.coords.latitude;
+              const lon = position.coords.longitude;
+              // Redirect to map page with coordinates
+              window.location.href = `map.html?lat=${lat}&lon=${lon}`;
+            },
+            (error) => {
+              console.error('Geolocation error:', error.message);
+              alert('Unable to retrieve your location. Please check your browser settings and ensure you\'re using HTTPS.');
+              // Fallback to map page
+              window.location.href = 'map.html';
+            }
+          );
+        } else {
+          alert('Geolocation is not supported by your browser.');
+          window.location.href = 'map.html';
+        }
+      });
+
+      // Register service worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

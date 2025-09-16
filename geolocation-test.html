@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geolocation Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-white text-gray-900 font-sans p-8">
+    <div class="max-w-md mx-auto">
+        <h1 class="text-2xl font-bold mb-4">Geolocation Debug Test</h1>
+        
+        <div id="status" class="mb-4 p-4 rounded bg-gray-100">
+            Ready to test...
+        </div>
+        
+        <button id="testBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+            Test Geolocation
+        </button>
+        
+        <div id="results" class="mt-4 text-sm"></div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+        const testBtn = document.getElementById('testBtn');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : 'text-blue-600';
+            resultsDiv.innerHTML += `<div class="${color}">[${timestamp}] ${message}</div>`;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateStatus(message, type = 'info') {
+            const colors = {
+                info: 'bg-blue-100 text-blue-800',
+                success: 'bg-green-100 text-green-800',
+                error: 'bg-red-100 text-red-800',
+                warning: 'bg-yellow-100 text-yellow-800'
+            };
+            statusDiv.className = `mb-4 p-4 rounded ${colors[type]}`;
+            statusDiv.textContent = message;
+        }
+
+        testBtn.addEventListener('click', () => {
+            resultsDiv.innerHTML = '';
+            log('🔍 Starting geolocation test...');
+            
+            // Basic checks
+            log(`Protocol: ${location.protocol}`);
+            log(`Hostname: ${location.hostname}`);
+            log(`Port: ${location.port}`);
+            log(`User Agent: ${navigator.userAgent}`);
+            
+            // Check geolocation support
+            if (!navigator.geolocation) {
+                log('❌ Geolocation not supported', 'error');
+                updateStatus('Geolocation not supported by browser', 'error');
+                return;
+            }
+            
+            log('✅ Geolocation is supported');
+            
+            // Check secure context
+            const isSecureContext = location.protocol === 'https:' || 
+                                   location.hostname === 'localhost' || 
+                                   location.hostname === '127.0.0.1' ||
+                                   location.hostname === '';
+            
+            log(`Secure context: ${isSecureContext ? '✅' : '⚠️'}`);
+            
+            if (!isSecureContext) {
+                log('⚠️ WARNING: Geolocation may not work over HTTP on remote hosts', 'warning');
+                updateStatus('Warning: HTTP may block geolocation', 'warning');
+            }
+            
+            // Test geolocation
+            updateStatus('Requesting location...', 'info');
+            testBtn.disabled = true;
+            testBtn.textContent = 'Testing...';
+            
+            const startTime = Date.now();
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const elapsed = Date.now() - startTime;
+                    log(`✅ SUCCESS! Got location in ${elapsed}ms`, 'success');
+                    log(`Latitude: ${position.coords.latitude}`);
+                    log(`Longitude: ${position.coords.longitude}`);
+                    log(`Accuracy: ±${position.coords.accuracy}m`);
+                    log(`Altitude: ${position.coords.altitude || 'N/A'}`);
+                    log(`Speed: ${position.coords.speed || 'N/A'}`);
+                    log(`Timestamp: ${new Date(position.timestamp)}`);
+                    
+                    updateStatus(`Location found! Lat: ${position.coords.latitude.toFixed(6)}, Lon: ${position.coords.longitude.toFixed(6)}`, 'success');
+                    
+                    testBtn.disabled = false;
+                    testBtn.textContent = 'Test Again';
+                },
+                (error) => {
+                    const elapsed = Date.now() - startTime;
+                    log(`❌ ERROR after ${elapsed}ms`, 'error');
+                    log(`Error code: ${error.code}`, 'error');
+                    log(`Error message: ${error.message}`, 'error');
+                    
+                    let userMessage = 'Failed: ';
+                    switch(error.code) {
+                        case 1: // PERMISSION_DENIED
+                            userMessage += 'Permission denied';
+                            log('💡 User denied location permission or browser blocked it', 'error');
+                            break;
+                        case 2: // POSITION_UNAVAILABLE
+                            userMessage += 'Position unavailable';
+                            log('💡 Location services might be disabled', 'error');
+                            break;
+                        case 3: // TIMEOUT
+                            userMessage += 'Request timeout';
+                            log('💡 Request took too long', 'error');
+                            break;
+                        default:
+                            userMessage += 'Unknown error';
+                    }
+                    
+                    updateStatus(userMessage, 'error');
+                    
+                    testBtn.disabled = false;
+                    testBtn.textContent = 'Try Again';
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 60000
+                }
+            );
+        });
+
+        // Initial status
+        updateStatus('Click "Test Geolocation" to begin', 'info');
+        log('🚀 Geolocation test page loaded');
+    </script>
+</body>
+</html>

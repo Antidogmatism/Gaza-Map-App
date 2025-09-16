@@ -1,0 +1,11 @@
+fetch('gaza.geojson/areas/gaza-strip.geojson')
+  .then((res) => res.json())
+  .then((data) => {
+    gazaLayer = L.geoJSON(data, {
+      style: {
+        color: '#dc2626',
+        weight: 2,
+        fillOpacity: 0.2,
+      },
+    }).addTo(map);
+  });
